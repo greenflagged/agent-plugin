@@ -1,0 +1,9 @@
+{
+  "name": "greenflagged",
+  "description": "Check npm dependencies against the GreenFlagged registry before installing them",
+  "author": {
+    "name": "GreenFlagged"
+  },
+  "homepage": "https://greenflagged.dev",
+  "license": "MIT"
+}

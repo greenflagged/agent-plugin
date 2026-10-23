@@ -1,0 +1,9 @@
+{
+  "greenflagged": {
+    "type": "http",
+    "url": "https://greenflagged.dev/mcp",
+    "headers": {
+      "Authorization": "Bearer ${GREENFLAGGED_TOKEN}"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "greenflagged",
+  "description": "GreenFlagged: reviewed npm dependencies for coding agents",
+  "owner": {
+    "name": "GreenFlagged"
+  },
+  "plugins": [
+    {
+      "name": "greenflagged",
+      "source": "./",
+      "description": "GreenFlagged MCP server, the greenflagged-deps skill, and a hook that pauses each new package install once per session so it can be checked",
+      "homepage": "https://greenflagged.dev"
+    }
+  ]
+}
