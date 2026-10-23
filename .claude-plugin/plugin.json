@@ -1,8 +1,8 @@
 {
   "name": "greenflagged",
-  "description": "Check npm dependencies against the GreenFlagged registry before installing them",
+  "description": "Check npm dependencies against the Greenflagged registry before installing them",
   "author": {
-    "name": "GreenFlagged"
+    "name": "Greenflagged"
   },
   "homepage": "https://greenflagged.dev",
   "license": "MIT"

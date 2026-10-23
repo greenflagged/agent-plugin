@@ -1,10 +1,10 @@
-# GreenFlagged plugin for Claude Code
+# Greenflagged plugin for Claude Code
 
-[GreenFlagged](https://greenflagged.dev) is an npm registry that serves only
+[Greenflagged](https://greenflagged.dev) is an npm registry that serves only
 packages that passed automated security analysis and review. This plugin
 connects Claude Code to it. It adds three things:
 
-- **The GreenFlagged MCP server.** The agent can ask whether a package is
+- **The Greenflagged MCP server.** The agent can ask whether a package is
   reviewed (`check_package`), audit a whole `package.json` (`audit_manifest`),
   and request an import (`request_package`).
 - **The `greenflagged-deps` skill.** It tells the agent when to call those
@@ -25,7 +25,7 @@ Inside Claude Code:
 
 Then restart Claude Code.
 
-If you added the GreenFlagged MCP server by hand earlier, remove it first, so
+If you added the Greenflagged MCP server by hand earlier, remove it first, so
 the agent does not see two copies of every tool:
 
 ```
@@ -48,7 +48,7 @@ HTTP 401.
 ## Point npm at the registry
 
 The plugin does not change where npm installs from. To install from
-GreenFlagged, add these two lines to `~/.npmrc`:
+Greenflagged, add these two lines to `~/.npmrc`:
 
 ```ini
 registry=https://greenflagged.dev/npm/
@@ -87,7 +87,7 @@ parser. An install hidden in a script file, a variable or `$(...)` is
 missed.
 
 The pause is a one-time deny. Claude Code shows the agent a short reason that
-names the packages and the GreenFlagged tools. The agent checks the packages,
+names the packages and the Greenflagged tools. The agent checks the packages,
 re-runs the same command, and the command proceeds. Each package name pauses
 once per session. `npm i a b` after a paused `npm i a` pauses once more, for
 `b`.
@@ -112,7 +112,7 @@ first.
 
 The hook makes no network calls. It is a pause, not a gate: an agent can
 always route around it. What stops an unreviewed package is npm installing
-from GreenFlagged (set up above). A package with no reviewed version fails to
+from Greenflagged (set up above). A package with no reviewed version fails to
 install there. If npm points anywhere else, nothing stops it.
 
 The hook records the names it has paused on in one small file per session,
@@ -136,7 +136,7 @@ Or turn auto-update on under `/plugin` → Marketplaces.
 
 ## Where does the source live?
 
-This GitHub repo is a mirror, written by CI from GreenFlagged's private
+This GitHub repo is a mirror, written by CI from Greenflagged's private
 source repo. Every sync overwrites it.
 
 Please report bugs and ideas in this repo's

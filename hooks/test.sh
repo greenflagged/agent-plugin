@@ -1,5 +1,5 @@
 #!/bin/sh
-# Fixture tests for the GreenFlagged plugin hooks. No dependencies beyond
+# Fixture tests for the Greenflagged plugin hooks. No dependencies beyond
 # sh and node. Run from anywhere: sh hooks/test.sh
 #
 # Each case feeds hook input JSON to pre-install-check.sh, the same way

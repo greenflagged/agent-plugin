@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// PreToolUse hook logic for the GreenFlagged plugin. pre-install-check.sh
+// PreToolUse hook logic for the Greenflagged plugin. pre-install-check.sh
 // runs this with the hook input JSON on stdin.
 //
 // What it does, in plain terms: the first time a session's Bash command
 // installs a package by name, the hook denies that one command and tells the
-// agent to check the package with the GreenFlagged MCP tools. Re-running the
+// agent to check the package with the Greenflagged MCP tools. Re-running the
 // same command then proceeds. The pause is once per package name per session.
 //
 // "Installs a package by name" covers `npm install lodash`, `pnpm add x`,
@@ -620,12 +620,12 @@ function prune(dir, keep) {
 function reasonText(names) {
   // Factual statements, not instructions: the hooks docs warn that imperative
   // text in hook output can read like a prompt injection.
-  return 'GreenFlagged plugin: this install was paused once so the packages can be checked. ' +
+  return 'Greenflagged plugin: this install was paused once so the packages can be checked. ' +
     `Packages: ${names.join(', ')}. ` +
-    'Checking them with the GreenFlagged check_package or audit_manifest tool, then re-running the same command, proceeds. ' +
+    'Checking them with the Greenflagged check_package or audit_manifest tool, then re-running the same command, proceeds. ' +
     'A command that only re-runs the same package names is not paused again. ' +
-    'If the GreenFlagged tools are unavailable, re-running the command still proceeds. ' +
-    'If this project\'s npm registry is GreenFlagged (registry=https://greenflagged.dev/npm/), unreviewed packages fail to install; otherwise nothing stops them.';
+    'If the Greenflagged tools are unavailable, re-running the command still proceeds. ' +
+    'If this project\'s npm registry is Greenflagged (registry=https://greenflagged.dev/npm/), unreviewed packages fail to install; otherwise nothing stops them.';
 }
 
 function decide(input) {

@@ -1,6 +1,6 @@
 ---
 name: greenflagged-deps
-description: Check npm dependencies against the GreenFlagged registry before installing or changing them.
+description: Check npm dependencies against the Greenflagged registry before installing or changing them.
 ---
 
 # greenflagged-deps
@@ -9,7 +9,7 @@ Check every npm dependency against the greenflagged registry before installing i
 
 The registry covers npm today. PyPI support is planned ([greenflagged/registry#486](https://gitlab.com/greenflagged/registry/-/issues/486)).
 
-If you installed the GreenFlagged Claude Code plugin, its hook pauses the first named install of each package once per session, so the package can be checked first. A session idle for more than a day may see the pause again.
+If you installed the Greenflagged Claude Code plugin, its hook pauses the first named install of each package once per session, so the package can be checked first. A session idle for more than a day may see the pause again.
 
 **Tool names.** This file calls the MCP tools by their short names (`audit_manifest`, `check_package`, …). The full name depends on how the server was added. Added with `claude mcp add greenflagged`, it is `mcp__greenflagged__audit_manifest`. Added by the plugin, it is `mcp__plugin_greenflagged_greenflagged__audit_manifest`.
 
@@ -69,7 +69,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 2. Call `audit_manifest` with that map.
 3. For each entry in the response, branch on `status`:
    - `greenflagged_with_overrides` — proceed only after adding `served_with_overrides.overrides` to `package.json` `overrides`, with the user's agreement. See the section above.
-   - `greenflagged` — proceed. The `version` field tells you which version to install. If `version` differs from the requested constraint, the entry also carries `proposed_constraint` — suggest the constraint edit to the user before writing `package.json`. If `version` is `null`, every greenflagged version is deprecated upstream and GreenFlagged recommends none. Do not pin `latest_greenflagged` as a recommendation; ask the user.
+   - `greenflagged` — proceed. The `version` field tells you which version to install. If `version` differs from the requested constraint, the entry also carries `proposed_constraint` — suggest the constraint edit to the user before writing `package.json`. If `version` is `null`, every greenflagged version is deprecated upstream and Greenflagged recommends none. Do not pin `latest_greenflagged` as a recommendation; ask the user.
    - `rejected` — stop. The `reason` object explains why; surface it to the user and don't try to override.
    - `pending` — the package is in the registry but no version is approved yet. Decide with the user: wait, or use `request_package` to bump priority.
    - `not_imported` — the registry hasn't seen this package, but it may exist on npm. Call `request_package` to import it.

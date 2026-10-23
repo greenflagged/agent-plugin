@@ -1,5 +1,5 @@
 #!/bin/sh
-# PreToolUse hook (matcher: Bash) for the GreenFlagged plugin.
+# PreToolUse hook (matcher: Bash) for the Greenflagged plugin.
 #
 # This wrapper finds node and hands the hook input to pre-install-check.js,
 # which decides whether to pause the command. The wrapper exists so the
