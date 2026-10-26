@@ -32,23 +32,56 @@ the agent does not see two copies of every tool:
 claude mcp remove greenflagged
 ```
 
-## Set your token
+## Sign in
 
-Mint a token at <https://greenflagged.dev/account/tokens>. Use a token minted
-just for this machine, so you can revoke it alone. The plugin reads it from
-`GREENFLAGGED_TOKEN`, so export it in your shell profile:
+The MCP server signs in through your browser. It needs no token.
+
+1. Run `/mcp` inside Claude Code.
+2. Choose the Greenflagged server.
+3. Approve the request on the Greenflagged page that opens in your browser.
+
+Claude Code keeps the sign-in and refreshes it. To disconnect, use
+**Connected agents** at <https://greenflagged.dev/account/tokens>.
+
+### CI and headless machines
+
+A machine with no browser cannot sign in. Use a token instead. Mint one at
+<https://greenflagged.dev/account/tokens>, just for that machine, so you can
+revoke it alone. Export it as `GREENFLAGGED_TOKEN` (see
+[Point npm at the registry](#point-npm-at-the-registry)), then add the server
+by hand:
+
+```sh
+claude mcp add --transport http greenflagged https://greenflagged.dev/mcp \
+  --header "Authorization: Bearer $GREENFLAGGED_TOKEN"
+```
+
+The variable keeps the token out of your shell history. The shell expands it
+before Claude Code runs, though. Claude Code then stores the header, token
+included, in plain text in `~/.claude.json`. Two rules follow:
+
+- **Never use `--scope project`.** That writes the token into the project's
+  `.mcp.json`.
+- **Never commit an `.mcp.json` with a token in it.**
+
+The tools from this server are named `mcp__greenflagged__…`, not
+`mcp__plugin_greenflagged_greenflagged__…` as under the plugin. The skill
+knows both names.
+
+The plugin's own MCP server stays signed out there. Its skill and hook still
+work.
+
+## Point npm at the registry
+
+The plugin does not change where npm installs from. npm needs a token of its
+own, because signing in covers only the MCP server. Mint one at
+<https://greenflagged.dev/account/tokens> and export it in your shell profile:
 
 ```sh
 export GREENFLAGGED_TOKEN=gflag_...
 ```
 
-If the variable is unset, the MCP server shows as failed in `/mcp` with an
-HTTP 401.
-
-## Point npm at the registry
-
-The plugin does not change where npm installs from. To install from
-Greenflagged, add these two lines to `~/.npmrc`:
+Then add these two lines to `~/.npmrc`:
 
 ```ini
 registry=https://greenflagged.dev/npm/
@@ -133,6 +166,10 @@ Update by hand:
 ```
 
 Or turn auto-update on under `/plugin` → Marketplaces.
+
+Earlier versions of the plugin sent `GREENFLAGGED_TOKEN` as a header to the
+MCP server. This version does not. After updating, sign in once (see
+[Sign in](#sign-in)). Keep `GREENFLAGGED_TOKEN` exported if npm uses it.
 
 ## Where does the source live?
 
