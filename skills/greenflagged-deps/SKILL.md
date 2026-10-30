@@ -32,7 +32,7 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 ```
 {
-  "schema_version":     1,
+  "schema_version":     2,
   "name":               <package name>,
   "version":            <best greenflagged version, or null>,
   "status":             "greenflagged" | "greenflagged_with_overrides" | "rejected" | "pending" | "uninstallable" | "not_imported" | "not_in_upstream",
@@ -43,7 +43,7 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 Every key is always present (null when not applicable) so you can branch on `status` without defensive existence checks.
 
-`schema_version` is on every MCP response: each read and `request_package` envelope, each `check_request` answer, and once at the top level of a `resolve_dep_tree` response. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`.
+`schema_version` is in four shapes: the `check_package` envelope, each `audit_manifest` entry, the `request_package` envelope and the `check_request` answer. A `resolve_dep_tree` response carries `schema_version` once, at the top level. An `audit_manifest` response has no top-level key, so an empty manifest returns `{}`. `search_packages` returns a bare list of names. `audit_lockfile` numbers its own `schema_version` separately. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`. Version 2 (#592): `proposed_constraint` and `suggested_manifest_changes[].to` are exact versions, and `audit_manifest`'s `version: null` means no recommendation, and `proposal_omitted`, when present, names why.
 
 `request_package` answers one of `already_greenflagged | already_greenflagged_with_overrides | queued | already_queued | rejected | not_in_upstream`.
 
@@ -69,7 +69,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 2. Call `audit_manifest` with that map.
 3. For each entry in the response, branch on `status`:
    - `greenflagged_with_overrides` — proceed only after adding `served_with_overrides.overrides` to `package.json` `overrides`, with the user's agreement. See the section above.
-   - `greenflagged` — proceed. The `version` field tells you which version to install. If `version` differs from the requested constraint, the entry also carries `proposed_constraint` — suggest the constraint edit to the user before writing `package.json`. If `version` is `null`, every greenflagged version is deprecated upstream and Greenflagged recommends none. Do not pin `latest_greenflagged` as a recommendation; ask the user.
+   - `greenflagged` — proceed. The `version` field tells you which version to install. If `version` differs from the requested constraint, the entry also carries `proposed_constraint`. That value is the exact reviewed version to write, never a range[^1]. Suggest the constraint edit to the user before writing `package.json`. If `version` is `null`, Greenflagged recommends none, and `proposal_omitted`, when present, says why. `deprecated_only` means every greenflagged version is deprecated upstream. `prerelease_only` means every greenflagged version that is not deprecated is a prerelease. Do not pin `latest_greenflagged` as a recommendation; ask the user.
    - `rejected` — stop. The `reason` object explains why; surface it to the user and don't try to override.
    - `pending` — the package is in the registry but no version is approved yet. Decide with the user: wait, or use `request_package` to bump priority.
    - `not_imported` — the registry hasn't seen this package, but it may exist on npm. Call `request_package` to import it.
@@ -97,7 +97,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
     "status": "greenflagged",
     "latest_greenflagged": "18.2.0",
     "reason": null,
-    "proposed_constraint": "^18.2.0"
+    "proposed_constraint": "18.2.0"
   },
   "some-internal-pkg": {
     "name": "some-internal-pkg",
@@ -144,7 +144,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 
 ```
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name":   <package name>,
   "ready":  true | false,
   "approved": <count>,
@@ -168,7 +168,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 
 `resolve_dep_tree` takes the **raw `package.json` body** (not a pre-flattened map), walks every direct dep plus its already-greenflagged transitive runtime children, and returns six buckets. **The tree is installable as published iff `greenflagged_gaps`, `policy_blocks`, `incompatible_greenflagged`, `unresolvable_transitives`, and `uninstallable_blocks` are all empty.**
 
-- `needed_overrides` — at least one greenflagged version exists AND the highest one satisfies the requested range. Each entry has `package`, `requested_range`, `status="greenflagged"`, `closest_greenflagged_version`, `proposed_constraint` (caret-pin to the closest greenflagged version), `reason=null`, `parent_chain`. Treat like an out-of-range entry in `audit_manifest` — propose the constraint edit and ask before writing it. Effectively empty in normal operation (the BFS resolves in-range approved directly without classifying); kept as a structural slot.
+- `needed_overrides` — at least one greenflagged version exists AND the highest one satisfies the requested range. Each entry has `package`, `requested_range`, `status="greenflagged"`, `closest_greenflagged_version`, `proposed_constraint` (the exact closest greenflagged version), `reason=null`, `parent_chain`. Treat like an out-of-range entry in `audit_manifest` — propose the constraint edit and ask before writing it. Effectively empty in normal operation (the BFS resolves in-range approved directly without classifying); kept as a structural slot.
 - `greenflagged_gaps` — zero greenflagged versions exist for the package AND either the package is unknown or a non-rejected version sits in range. Each entry has `package`, `requested_range`, `status="not_imported"`, `candidate_version` (highest registered version of any non-rejected status that's in range, nullable), `reason=null`, `parent_chain`. Queueable via `request_package` — or pass `auto_request=true` and `resolve_dep_tree` does it for you, returning `queued_import_job_id` on every gap. Two `reason` values mark an EXACT pin the mirror doesn't have yet, where `candidate_version` is the pinned version itself and `auto_request` boosts that exact version: `exact-prerelease-pin` (e.g. `1.2.3-beta.1`) and `exact-pin-not-imported` (its stable sibling, e.g. `5.9.999`). Those two entries also carry an `upstream` key — `"present"` (we confirmed upstream npm publishes the pin) or `"unverified"` (the upstream check didn't complete: timeout, rate limit, or the per-request probe budget ran out — re-resolve re-checks). An `unverified` gap is still queueable, but the import may fail if the version turns out not to exist upstream.
 - `policy_blocks` — the highest in-range version is `rejected`, or every version of the package is `rejected`. Each entry has `package`, `requested_range`, `status="rejected"`, `rejected_version`, `reason`, `parent_chain`, and optionally `closest_greenflagged_version` (highest greenflagged version strictly above the requested range, when one exists — feeds `suggested_manifest_changes`). Fires **before** the approved-out-of-range incompatible case so a rejected in-range version isn't silently shadowed by an out-of-range approved hint. Stop and escalate to a human (unless `suggested_manifest_changes` already covers the gap mechanically); don't try to override. The `reason` object takes one of two shapes:
   - `reason={kind, rule, source, disposition: "reject", author, reason, fix_version_hint?}` — a reviewer (human or AI) has recorded an explicit reject in `accepted_risks`. `kind` is the mined taxonomy value (`cve | license | deprecated | superseded | governance`) derived from the reject driver — it is **no longer** the literal `"disposition"` (wire-contract change, issue #157). `cve` names an OSV/GHSA/CVE advisory driver, `license` a license-policy reject, and `governance` a plain review reject with no security driver; the sibling `rule`/`source`/`disposition`/`author`/`reason`/`fix_version_hint?` keys are unchanged. Identify this shape by the presence of those disposition keys (a bare `governance` kind alone doesn't imply it — see the next bullet). `author` is either `"AI (ai review #<id> on <version>)"` or the bare reviewer name; `reason` carries the reviewer's free-form rationale; `fix_version_hint` is best-effort extracted from `reason` when it contains `fixed in X.Y.Z` (case-insensitive). **Note:** when multiple distinct rules are active against a package (e.g. OSV + license), only the most-recent reject row surfaces — don't treat the single visible rule as the only block.
@@ -188,7 +188,7 @@ Alongside the buckets, `resolve_dep_tree` returns four synthesized fields derive
 
   Every entry also carries `compatibility`: `same_major`, or `cross_major` (0.x to 1.x counts, and so does 0.2 to 0.3). **A `cross_major` pin is only offered alongside a `suggested_parent_upgrades` entry for the same parent, never by itself.** Without one it moves to `omitted_overrides`. A direct dependency has no parent to upgrade, so a cross-major pin on one is always omitted. Nothing here has been tested against your code.
   Empty when there's nothing to pin.
-- `suggested_manifest_changes` — paste-and-go remediation map for direct-dep `policy_blocks` where a clean greenflagged version exists strictly above the requested range. Each entry is keyed by package name with shape `{from: <requestedRange>, to: "^<lowestAboveRange>", reason: "policy_block_in_requested_range", closest_greenflagged_version: <version>}`. Suggests bumping the manifest constraint (e.g. `^1.0.0` → `^2.0.0`) so the agent can move past the rejected in-range version instead of escalating to a human. Transitive policy_blocks DO NOT land here (the constraint lives in the parent package's `package.json`, outside the user's reach). Pre-release versions are filtered out — the bump target is always a stable major. When an entry lands here, the corresponding `omitted_overrides` row is suppressed (one signal per remediation path).
+- `suggested_manifest_changes` — paste-and-go remediation map for direct-dep `policy_blocks` where a clean greenflagged version exists strictly above the requested range. Each entry is keyed by package name with shape `{from: <requestedRange>, to: "<lowestAboveRange>", reason: "policy_block_in_requested_range", closest_greenflagged_version: <version>}`. Suggests setting the manifest constraint to that exact version (e.g. `^1.0.0` → `2.0.0`) so the agent can move past the rejected in-range version instead of escalating to a human. Transitive policy_blocks DO NOT land here (the constraint lives in the parent package's `package.json`, outside the user's reach). Pre-release versions are filtered out — the bump target is always a stable major. When an entry lands here, the corresponding `omitted_overrides` row is suppressed (one signal per remediation path).
 - `omitted_overrides` — sibling list of `{package, reason, ...}` entries explaining what was intentionally NOT included in either suggested-* field and why. Seven reasons today:
   - `reason="pending"` (sourced from `incompatible_greenflagged` with `status="pending"`) — closest known version isn't greenflagged yet. Carries `closest_greenflagged_version`. Wait for the version to land, or poll `check_request`.
   - `reason="policy_block"` (sourced from `policy_blocks` NOT covered by `suggested_manifest_changes`) — an in-range version is rejected. Carries `rejected_version` plus `reason_detail` (the bucket entry's `reason` object — disposition or governance flavor per above). When a paired override pin was emitted (issue #106), the entry additionally carries `suggested_override` — the full `{key, version, caveat}` map for the pin — so you can round-trip from the security signal to the mechanical fix without rescanning the suggested list. Escalate to a human; the `suggested_override` is a "here's the pin if the user accepts the risk" hint, not an auto-paste.
@@ -198,7 +198,7 @@ Alongside the buckets, `resolve_dep_tree` returns four synthesized fields derive
   - `reason="parent_upgrade_not_computed"` (issue #443) — the same, except we never looked the parent upgrade up, because the per-call lookup cap was spent. The response then carries `parent_upgrades_truncated: true`. Re-resolve a narrower slice of the manifest.
   - `reason="uninstallable"` (issue #443) — an `uninstallable_blocks` entry with no fix at all. Carries `uninstallable_version`. Escalate.
 
-`suggested_manifest_changes` has a third `reason`, `uninstallable_in_requested_range` (issue #443), for a direct dependency whose in-range version is uninstallable. `to` is `^<the package's own newer version>` and the entry carries `compatibility`.
+`suggested_manifest_changes` has a third `reason`, `uninstallable_in_requested_range` (issue #443), for a direct dependency whose in-range version is uninstallable. `to` is `<the package's own newer version>`, exact with no caret, and the entry carries `compatibility`.
 
 [^1]: Exact pins can hold over the long term even if the version is later unpublished from upstream npm — the greenflagged registry keeps the tarball, so a pinned version stays installable.
 
@@ -240,7 +240,7 @@ Sample response:
       "requested_range": "^19.0.0",
       "status": "greenflagged",
       "closest_greenflagged_version": "18.2.0",
-      "proposed_constraint": "^18.2.0",
+      "proposed_constraint": "18.2.0",
       "reason": null,
       "parent_chain": []
     }
@@ -316,7 +316,7 @@ Sample response:
   "suggested_manifest_changes": {
     "abandoned-pkg": {
       "from": "^1.0.0",
-      "to": "^2.0.0",
+      "to": "2.0.0",
       "reason": "policy_block_in_requested_range",
       "closest_greenflagged_version": "2.0.0"
     }
