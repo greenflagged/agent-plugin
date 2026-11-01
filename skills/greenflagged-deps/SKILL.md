@@ -32,7 +32,7 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 ```
 {
-  "schema_version":     2,
+  "schema_version":     3,
   "name":               <package name>,
   "version":            <best greenflagged version, or null>,
   "status":             "greenflagged" | "greenflagged_with_overrides" | "rejected" | "pending" | "uninstallable" | "not_imported" | "not_in_upstream",
@@ -43,7 +43,7 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 Every key is always present (null when not applicable) so you can branch on `status` without defensive existence checks.
 
-`schema_version` is in four shapes: the `check_package` envelope, each `audit_manifest` entry, the `request_package` envelope and the `check_request` answer. A `resolve_dep_tree` response carries `schema_version` once, at the top level. An `audit_manifest` response has no top-level key, so an empty manifest returns `{}`. `search_packages` returns a bare list of names. `audit_lockfile` numbers its own `schema_version` separately. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`. Version 2 (#592): `proposed_constraint` and `suggested_manifest_changes[].to` are exact versions, and `audit_manifest`'s `version: null` means no recommendation, and `proposal_omitted`, when present, names why.
+`schema_version` is in four shapes: the `check_package` envelope, each `audit_manifest` entry, the `request_package` envelope and the `check_request` answer. A `resolve_dep_tree` response carries `schema_version` once, at the top level. An `audit_manifest` response has no top-level key, so an empty manifest returns `{}`. `search_packages` returns a bare list of names. `audit_lockfile` numbers its own `schema_version` separately. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`. Version 2 (#592): `proposed_constraint` and `suggested_manifest_changes[].to` are exact versions, and `audit_manifest`'s `version: null` means no recommendation, and `proposal_omitted`, when present, names why. Version 3 (#482): `resolve_dep_tree` takes an optional `ecosystem` and answers a top-level `status` of `disabled` or `unsupported_ecosystem` for `pypi`; npm responses are unchanged.
 
 `request_package` answers one of `already_greenflagged | already_greenflagged_with_overrides | queued | already_queued | rejected | not_in_upstream`.
 
@@ -149,7 +149,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 
 ```
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "name":   <package name>,
   "ready":  true | false,
   "approved": <count>,
@@ -170,6 +170,8 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 ## When to reach for `resolve_dep_tree` instead
 
 `audit_manifest` only inspects the direct deps in `package.json`. If you need to understand transitive coverage in one round trip — and optionally fast-path-queue every gap — call `resolve_dep_tree` instead.
+
+`resolve_dep_tree` is npm-only. `ecosystem: "pypi"` answers a top-level `status` of `disabled` (PyPI is off on this registry) or `unsupported_ecosystem`, and walks nothing. For Python, audit the `uv.lock` with `audit_lockfile`.
 
 `resolve_dep_tree` takes the **raw `package.json` body** (not a pre-flattened map), walks every direct dep plus its already-greenflagged transitive runtime children, and returns six buckets. **The tree is installable as published iff `greenflagged_gaps`, `policy_blocks`, `incompatible_greenflagged`, `unresolvable_transitives`, and `uninstallable_blocks` are all empty.**
 
