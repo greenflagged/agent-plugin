@@ -32,7 +32,7 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 ```
 {
-  "schema_version":     3,
+  "schema_version":     4,
   "name":               <package name>,
   "version":            <best greenflagged version, or null>,
   "status":             "greenflagged" | "greenflagged_with_overrides" | "rejected" | "pending" | "uninstallable" | "not_imported" | "not_in_upstream",
@@ -43,9 +43,9 @@ Read-tool envelope (`check_package`, `audit_manifest` per-entry). `resolve_dep_t
 
 Every key is always present (null when not applicable) so you can branch on `status` without defensive existence checks.
 
-`schema_version` is in four shapes: the `check_package` envelope, each `audit_manifest` entry, the `request_package` envelope and the `check_request` answer. A `resolve_dep_tree` response carries `schema_version` once, at the top level. An `audit_manifest` response has no top-level key, so an empty manifest returns `{}`. `search_packages` returns a bare list of names. `audit_lockfile` numbers its own `schema_version` separately. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`. Version 2 (#592): `proposed_constraint` and `suggested_manifest_changes[].to` are exact versions, and `audit_manifest`'s `version: null` means no recommendation, and `proposal_omitted`, when present, names why. Version 3 (#482): `resolve_dep_tree` takes an optional `ecosystem` and answers a top-level `status` of `disabled` or `unsupported_ecosystem` for `pypi`; npm responses are unchanged.
+`schema_version` is in four shapes: the `check_package` envelope, each `audit_manifest` entry, the `request_package` envelope and the `check_request` answer. A `resolve_dep_tree` response carries `schema_version` once, at the top level. An `audit_manifest` response has no top-level key, so an empty manifest returns `{}`. `search_packages` returns a bare list of names. `audit_lockfile` numbers its own `schema_version` separately. Adding an optional key never bumps it. A new or changed `status` value, or a changed meaning for a key, bumps it. Envelopes without `schema_version` predate `greenflagged_with_overrides`. Version 2 (#592): `proposed_constraint` and `suggested_manifest_changes[].to` are exact versions, and `audit_manifest`'s `version: null` means no recommendation, and `proposal_omitted`, when present, names why. Version 3 (#482): `resolve_dep_tree` takes an optional `ecosystem` and answers a top-level `status` of `disabled` or `unsupported_ecosystem` for `pypi`; npm responses are unchanged. Version 4 (#726): `request_package` takes an optional `ecosystem` and may answer `disabled`, `unsupported_ecosystem` or `refused`. One number serves every tool, so it moves for all of them; npm answers are unchanged.
 
-`request_package` answers one of `already_greenflagged | already_greenflagged_with_overrides | queued | already_queued | rejected | not_in_upstream`.
+`request_package` answers one of `already_greenflagged | already_greenflagged_with_overrides | queued | already_queued | rejected | not_in_upstream | disabled | unsupported_ecosystem | refused`.
 
 ### What does `greenflagged_with_overrides` mean?
 
@@ -134,14 +134,28 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 
 ```
 {
+  "schema_version": 4,
   "name":   <package name>,
   "version": <requested version, or null>,
-  "status": "already_greenflagged" | "queued" | "already_queued" | "rejected" | "not_in_upstream",
+  "status": "already_greenflagged" | "already_greenflagged_with_overrides" | "queued" | "already_queued" | "rejected" | "not_in_upstream" | "disabled" | "unsupported_ecosystem" | "refused",
   "reason": <{kind, detail, scope} object or null>
 }
 ```
 
-`already_queued` means a `package_import` job for this name is already in-flight — poll `check_request`. `not_in_upstream` short-circuits when npm has no such version (the request would have been a no-op).
+For npm, `already_queued` means a `package_import` job for this name is already in-flight — poll `check_request`. `not_in_upstream` short-circuits when npm has no such version (the request would have been a no-op).
+
+### Requesting a PyPI project
+
+Pass `ecosystem: "pypi"` to request a PyPI release. Spell it exactly: anything other than `npm` or `pypi` (including `PyPI`) answers `unsupported_ecosystem` and requests nothing. With no `ecosystem`, the name is an npm name, as before. A PyPI request is never looked up as npm.
+
+- `disabled` — PyPI is not open on this registry. Nothing was requested.
+- `refused` — the registry would not queue it. Either your team needs PyPI requests turned on and your token or sign-in must belong to that team (`NO_ORG`, `NOT_GRANTED`), or the queue is full or busy and you can retry (`QUEUE_FULL`, `BUSY`).
+- `queued` / `already_queued` — the release is queued for import. `reason.kind` is `pypi_human_review`: a person reviews every PyPI release before pip or uv can install it.
+- `not_in_upstream` — the name is not a valid PyPI project name, or the version is not a valid PEP 440 version.
+
+On `disabled` and `refused`, `reason` carries two more keys. `reason.code` is a machine code from an open list: today `DISABLED`, `NO_ORG`, `NOT_GRANTED`, `QUEUE_FULL` and `BUSY`. A new code can appear without a `schema_version` bump, so treat an unknown one as a refusal. `reason.retryable` is true for `QUEUE_FULL` and `BUSY` only: try again later. `reason.detail` is prose for a person; do not parse it.
+
+After a PyPI `queued`, do not call `check_request`: it answers about the npm package of that name.
 
 ## check_request envelope
 
@@ -149,7 +163,7 @@ If you match `status` by prefix (`startsWith("greenflagged")`) and install witho
 
 ```
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "name":   <package name>,
   "ready":  true | false,
   "approved": <count>,
@@ -197,7 +211,7 @@ Alongside the buckets, `resolve_dep_tree` returns four synthesized fields derive
   Empty when there's nothing to pin.
 - `suggested_manifest_changes` — paste-and-go remediation map for direct-dep `policy_blocks` where a clean greenflagged version exists strictly above the requested range. Each entry is keyed by package name with shape `{from: <requestedRange>, to: "<lowestAboveRange>", reason: "policy_block_in_requested_range", closest_greenflagged_version: <version>}`. Suggests setting the manifest constraint to that exact version (e.g. `^1.0.0` → `2.0.0`) so the agent can move past the rejected in-range version instead of escalating to a human. Transitive policy_blocks DO NOT land here (the constraint lives in the parent package's `package.json`, outside the user's reach). Pre-release versions are filtered out — the bump target is always a stable major. When an entry lands here, the corresponding `omitted_overrides` row is suppressed (one signal per remediation path).
 - `omitted_overrides` — sibling list of `{package, reason, ...}` entries explaining what was intentionally NOT included in either suggested-* field and why. Seven reasons today:
-  - `reason="pending"` (sourced from `incompatible_greenflagged` with `status="pending"`) — closest known version isn't greenflagged yet. Carries `closest_greenflagged_version`. Wait for the version to land, or poll `check_request`.
+  - `reason="pending"` (sourced from `incompatible_greenflagged` with `status="pending"`) — closest known version isn't greenflagged yet. Carries `closest_greenflagged_version`. Wait for the version to land, or poll `check_request` (npm only; after a PyPI `queued`, do not call it).
   - `reason="policy_block"` (sourced from `policy_blocks` NOT covered by `suggested_manifest_changes`) — an in-range version is rejected. Carries `rejected_version` plus `reason_detail` (the bucket entry's `reason` object — disposition or governance flavor per above). When a paired override pin was emitted (issue #106), the entry additionally carries `suggested_override` — the full `{key, version, caveat}` map for the pin — so you can round-trip from the security signal to the mechanical fix without rescanning the suggested list. Escalate to a human; the `suggested_override` is a "here's the pin if the user accepts the risk" hint, not an auto-paste.
   - `reason="prerelease_only"` (sourced from `incompatible_greenflagged` with `status="greenflagged"`) — the closest greenflagged version is a **pre-release**, so no suggestion was produced: `resolve_dep_tree` never proposes moving a consumer onto an unstable line (issue #105). Carries `closest_greenflagged_version` so you can surface the prerelease to the user and let *them* opt in by hand. **Wire-token note:** this reason was `out_of_range_only` between issues #126 and #105. The token `out_of_range_only` still exists, unchanged, in two unrelated places — `suggested_overrides[].caveat.type` and `suggested_manifest_changes[].reason` — where it means "the requested range doesn't intersect any greenflagged version" and says nothing about prereleases. Don't conflate them.
   - `reason="no-mirrored-version-in-range"` (sourced from `greenflagged_gaps`) — the registry mirrors the package but has no approved version at all, so neither pin path can fire. Carries `closest_greenflagged_version` when one is known. The gap is still queueable — an import may fetch an in-range version.
@@ -353,7 +367,7 @@ Note: `abandoned-pkg` would have shown up in `omitted_overrides` with `reason="p
 
 Workflow:
 1. Apply each `needed_overrides` proposal (ask the user before editing `package.json`).
-2. Wait for each `greenflagged_gaps` import to complete — poll `check_request` against the `package` name.
+2. Wait for each `greenflagged_gaps` import to complete — poll `check_request` against the `package` name. `check_request` answers about npm only; after a PyPI `request_package` `queued`, do not call it.
 3. Apply each `suggested_manifest_changes` entry — paste the `to` value into the matching `dependencies` constraint in `package.json` (ask the user before editing). The agent picks the smallest-jump fix (lowest greenflagged version above the rejected range), so the version drift is conservative.
 4. Bring any *remaining* `policy_blocks` entries to a human — these are the cases `suggested_manifest_changes` did NOT cover (transitive blocks, blocks with no greenflagged version above the range). The bucket entry's `reason` object carries the reviewer's rationale when present.
 5. Surface each `incompatible_greenflagged` entry to a human — the registry knows the package but not in the requested range. A range edit would help (compare `requested_range` vs. `closest_greenflagged_version`), but `auto_request` won't queue these (queuing an import doesn't change which existing versions are in range).
